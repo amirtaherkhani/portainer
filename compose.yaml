@@ -1,4 +1,5 @@
 services:
+  # Portainer service
   portainer:
     image: portainer/portainer-ce:latest
     hostname: portainer-server
@@ -17,9 +18,84 @@ services:
       - traefik.http.routers.portainer.tls=true
       - traefik.http.routers.portainer.tls.certresolver=letsencrypt
       - traefik.http.services.portainer.loadBalancer.server.port=9000
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:9000/api/status"]
+    #   interval: 1m30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 40s
+
+  # Docker Registry service
+  registry:
+    image: registry:2
+    container_name: docker-registry
+    hostname: registry-server
+    env_file:
+      - .env
+    volumes:
+      - ./auth:/auth
+      - registry-data:/var/lib/registry
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - traefik-network
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.registry.rule=Host(`registry.${HOST_NAME}`)
+      - traefik.http.routers.registry.entrypoints=websecure
+      - traefik.http.routers.registry.tls=true
+      - traefik.http.routers.registry.tls.certresolver=letsencrypt
+      - traefik.http.services.registry.loadBalancer.server.port=5000
+    restart: unless-stopped
+    # healthcheck:
+    #   test: ["CMD-SHELL", "curl -f http://localhost:9000/api/status || exit 1"]
+    #   interval: 1m
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 40s
+
+
+  # Helm Registry (ChartMuseum) service
+  helm-registry:
+    image: chartmuseum/chartmuseum:latest
+    container_name: helm-registry
+    environment:
+      - STORAGE=local
+      - STORAGE_LOCAL_ROOTDIR=/charts
+    volumes:
+      - helm-data:/charts
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.helm-registry.rule=Host(`helm-registry.${HOST_NAME}`)
+      - traefik.http.routers.helm-registry.entrypoints=websecure
+      - traefik.http.routers.helm-registry.tls=true
+      - traefik.http.routers.helm-registry.tls.certresolver=letsencrypt
+      - traefik.http.services.helm-registry.loadBalancer.server.port=8080
+    networks:
+      - traefik-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    # healthcheck:
+    #   test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+    #   interval: 1m
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 30s
+
 volumes:
   portainer-db:
     name: portainer-db
+    driver: local
+  registry-data:
+    name: registry-data
+    driver: local
+  helm-data:
+    name: helm-data
+    driver: local
+
 networks:
   traefik-network:
     external: true
